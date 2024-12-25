@@ -1,83 +1,87 @@
-name: Deploy Infrastructure and Application
+name: Fast Deploy
 
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - 'terraform/**'
 
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: employee-frontend
+  TERRAFORM_VERSION: 1.5.5
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  terraform:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
-      with:
-        terraform_version: 1.5.5
-
-    - name: Terraform Init
-      run: |
-        cd terraform
-        terraform init -input=false
-
-    - name: Terraform Apply
-      run: |
-        cd terraform
-        terraform apply -auto-approve \
-          -var="ecr_repository_url=${{ secrets.ECR_URL }}"
-
-  build-and-deploy:
-    needs: terraform
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Login to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v2
-      id: login-ecr
-
-    - name: Set ECR Registry as Environment Variable
-      run: echo "ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_ENV
-
-    - name: Cache Docker layers
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-docker-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-docker-
-
-    - name: Build and push Docker image
-      env:
-        ECR_REGISTRY: ${{ env.ECR_REGISTRY }}
-      run: |
-        cd frontend
-        docker buildx create --use
-        docker buildx build --cache-to=type=inline --cache-from=type=local,src=/tmp/.buildx-cache \
-          --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest --push .
-
-    - name: Force ECS Deployment
-      run: |
-        aws ecs update-service --cluster employee-cluster \
-          --service employee-frontend-service \
-          --force-new-deployment
-
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      
+      - name: Cache Terraform
+        uses: actions/cache@v3
+        with:
+          path: |
+            terraform/.terraform
+            terraform/.terraform.lock.hcl
+          key: ${{ runner.os }}-terraform-${{ hashFiles('terraform/**/*.tf') }}
+      
+      - name: Terraform Init & Apply
+        run: |
+          cd terraform
+          terraform init -input=false
+          terraform apply -auto-approve -parallelism=20 \
+            -var="ecr_repository_url=${{ secrets.ECR_URL }}"
+      
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        id: login-ecr
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+      
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          platforms: linux/amd64
+          provenance: false
+          no-cache-filters: node-modules
+      
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+      
+      - name: Force ECS Deployment
+        run: |
+          aws ecs update-service --cluster employee-cluster \
+            --service employee-frontend-service \
+            --force-new-deployment
 
