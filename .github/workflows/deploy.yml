@@ -1,9 +1,9 @@
-name: Fast Deploy
+name: New Fast Deploy
 
 on:
   push:
     branches: [main]
-    paths:
+    paths:  
       - 'frontend/**'
       - 'terraform/**'
       - '.github/workflows/**'
@@ -117,8 +117,8 @@ jobs:
             --query 'service.deployments[0].id' \
             --output text
       
-      - name: Wait for deployment
-        run: |
-          aws ecs wait services-stable \
-            --cluster employee-cluster \
-            --services employee-frontend-service
+    #  - name: Wait for deployment
+      #  run: |
+       #   aws ecs wait services-stable \
+        #    --cluster employee-cluster \
+         #   --services employee-frontend-service
