@@ -26,11 +26,16 @@ jobs:
       with:
         terraform_version: 1.5.5
 
-    - name: Terraform Init and Apply
+    - name: Terraform Init
       run: |
         cd terraform
         terraform init -input=false
-        terraform apply -auto-approve -input=false
+
+    - name: Terraform Apply
+      run: |
+        cd terraform
+        terraform apply -auto-approve \
+          -var="ecr_repository_url=${{ secrets.ECR_URL }}"
 
   build-and-deploy:
     needs: terraform
@@ -74,4 +79,5 @@ jobs:
         aws ecs update-service --cluster employee-cluster \
           --service employee-frontend-service \
           --force-new-deployment
+
 
