@@ -1,9 +1,9 @@
-name: New Fast Deploy
+name: Deploy Infrastructure and Application
 
 on:
   push:
-    branches: [main]
-    paths:  
+    branches: [ main ]
+    paths:
       - 'frontend/**'
       - 'terraform/**'
       - '.github/workflows/**'
@@ -13,16 +13,9 @@ env:
   ECR_REPOSITORY: employee-frontend
   TERRAFORM_VERSION: 1.5.5
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  infrastructure:
+  deploy:
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.modified, 'terraform/')
-    outputs:
-      infrastructure_updated: ${{ steps.tf_apply.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
       
@@ -38,40 +31,12 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
       
-      - name: Cache Terraform
-        uses: actions/cache@v3
-        with:
-          path: |
-            terraform/.terraform
-            terraform/.terraform.lock.hcl
-          key: terraform-${{ hashFiles('terraform/**/*.tf') }}
-          restore-keys: |
-            terraform-
-      
       - name: Terraform Init & Apply
-        id: tf_apply
         run: |
           cd terraform
           terraform init -input=false
           terraform apply -auto-approve -parallelism=20 \
-            -var="ecr_repository_url=${{ secrets.ECR_URL }}" | tee apply_output.txt
-          echo "changed=$(grep -c 'Apply complete' apply_output.txt)" >> $GITHUB_OUTPUT
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: infrastructure
-    if: |
-      contains(github.event.head_commit.modified, 'frontend/') ||
-      needs.infrastructure.outputs.infrastructure_updated != '0'
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+            -var="ecr_repository_url=${{ secrets.ECR_URL }}"
       
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -93,15 +58,14 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }},${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           platforms: linux/amd64
           build-args: |
             BUILDKIT_INLINE_CACHE=1
-          labels: |
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
       
       - name: Move cache
         run: |
@@ -114,11 +78,10 @@ jobs:
             --cluster employee-cluster \
             --service employee-frontend-service \
             --force-new-deployment \
-            --query 'service.deployments[0].id' \
             --output text
-      
-    #  - name: Wait for deployment
-      #  run: |
-       #   aws ecs wait services-stable \
-        #    --cluster employee-cluster \
-         #   --services employee-frontend-service
+
+      - name: Wait for deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster employee-cluster \
+            --services employee-frontend-service
