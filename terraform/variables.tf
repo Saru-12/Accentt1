@@ -7,4 +7,9 @@ variable "ecr_repository_url" {
   default     = "<ECR_URL>"
 }
 
+variable "container_port" {
+  description = "The container port to expose"
+  type        = number
+  default     = 3000  
+}
 
