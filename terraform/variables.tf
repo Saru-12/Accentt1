@@ -4,4 +4,7 @@ variable "aws_region" {
 
 variable "ecr_repository_url" {
   description = "URL of the ECR repository"
+  default     = "<ECR_URL>"
 }
+
+
