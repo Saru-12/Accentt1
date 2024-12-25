@@ -29,7 +29,7 @@ Frontend (React) → API Gateway → Lambda → DynamoDB
 
 1. **Clone the Repository**
 ```powershell
-git clone https://github.com/YOUR_USERNAME/employee-info-system.git
+git clone https://github.com/Saru-12/employee-info-system.git
 cd employee-info-system
 ```
 
@@ -52,7 +52,7 @@ aws configure
 Enter your:
 - AWS Access Key ID
 - AWS Secret Access Key
-- Default region (e.g., us-west-2)
+- Default region (e.g., us-east-1)
 - Default output format (json)
 
 4. **Terraform Infrastructure**
