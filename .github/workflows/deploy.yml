@@ -1,60 +1,77 @@
-name: Frontend Deploy
+name: Deploy Infrastructure and Application
 
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'frontend/**'
-      - 'terraform/**'
-      - '.github/workflows/**'
 
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: employee-frontend
 
 jobs:
-  deploy:
+  terraform:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v2
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
-    
+
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
-    
-    - name: Terraform Init
+      with:
+        terraform_version: 1.5.5
+
+    - name: Terraform Init and Apply
       run: |
         cd terraform
         terraform init -input=false
-    
-    - name: Terraform Apply
-      run: |
-        cd terraform
         terraform apply -auto-approve -input=false
-      
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-      
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v4
+
+  build-and-deploy:
+    needs: terraform
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
       with:
-        context: ./frontend
-        push: true
-        tags: |
-          ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-        build-args: |
-          NODE_ENV=production
-    
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v2
+      id: login-ecr
+
+    - name: Set ECR Registry as Environment Variable
+      run: echo "ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_ENV
+
+    - name: Cache Docker layers
+      uses: actions/cache@v3
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-docker-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-docker-
+
+    - name: Build and push Docker image
+      env:
+        ECR_REGISTRY: ${{ env.ECR_REGISTRY }}
+      run: |
+        cd frontend
+        docker buildx create --use
+        docker buildx build --cache-to=type=inline --cache-from=type=local,src=/tmp/.buildx-cache \
+          --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest --push .
+
     - name: Force ECS Deployment
       run: |
-        aws ecs update-service \
-          --cluster employee-cluster \
-          --service employee-frontend \
+        aws ecs update-service --cluster employee-cluster \
+          --service employee-frontend-service \
           --force-new-deployment
+
