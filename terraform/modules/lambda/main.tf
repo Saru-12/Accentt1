@@ -1,38 +1,27 @@
-resource "aws_iam_role" "lambda_role" {
-  name = "employee_lambda_role"
+# main_lambda.tf
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
+# Lambda Function for Employee API (Optional)
+resource "aws_lambda_function" "lambda_function" {
+  function_name = "employeeLambda"
+  role          = aws_iam_role.lambda_exec.arn
+  handler       = "index.handler"
+  runtime       = "nodejs14.x"
+  # Ensure that you have the necessary Lambda code deployment details here.
 }
 
-resource "aws_lambda_function" "employee_function" {
-  filename         = "function.zip"
-  function_name    = "employee-handler"
-  role            = aws_iam_role.lambda_role.arn
-  handler         = "index.handler"
-  runtime         = "nodejs16.x"
-
-  environment {
-    variables = {
-      TABLE_NAME = "EmployeeInfo"
-    }
-  }
+# Output the Lambda Function ARN
+output "lambda_function_arn" {
+  value       = aws_lambda_function.lambda_function.arn
+  description = "The ARN of the Lambda function"
 }
 
-output "function_arn" {
-  value = aws_lambda_function.employee_function.arn
+# CloudWatch Log Group for Lambda (Optional)
+resource "aws_cloudwatch_log_group" "lambda_log_group" {
+  name = "/aws/lambda/employeeLambda"
 }
 
-output "function_name" {
-  value = aws_lambda_function.employee_function.function_name
+# Output the CloudWatch Log Group for Lambda
+output "lambda_log_group" {
+  value       = aws_cloudwatch_log_group.lambda_log_group.name
+  description = "The CloudWatch Log Group associated with the Lambda function"
 }

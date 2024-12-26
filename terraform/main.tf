@@ -18,7 +18,7 @@ module "api_gateway" {
 
 module "ecs" {
   source = "./modules/ecs"
-  image_url = var.ecr_repository_url
-  container_port = 3000
-  depends_on = [module.api_gateway]
+
+  image_url      = var.ecr_repository_url
+  container_port = var.container_port
 }

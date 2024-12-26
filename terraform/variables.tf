@@ -13,4 +13,8 @@ variable "container_port" {
   type        = number
   default     = 3000  
 }
+variable "ecr_repository_url" {
+  description = "The URL of the ECR repository"
+  type        = string
+}
 

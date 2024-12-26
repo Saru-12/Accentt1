@@ -1,3 +1,6 @@
+# main_ecs.tf
+
+# ECS Task Definition for Employee App (Frontend)
 resource "aws_ecs_task_definition" "app" {
   family                   = "employee-app"
   requires_compatibilities = ["FARGATE"]
@@ -16,4 +19,10 @@ resource "aws_ecs_task_definition" "app" {
       }
     ]
   }])
+}
+
+# Output the ECS Task Definition ARN
+output "ecs_task_definition_arn" {
+  value       = aws_ecs_task_definition.app.arn
+  description = "The ARN of the ECS task definition"
 }

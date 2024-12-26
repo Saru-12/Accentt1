@@ -39,7 +39,6 @@ jobs:
           terraform apply -auto-approve -parallelism=10 \
             -var="ecr_repository_url=${{ secrets.ECR_URL }}"
           terraform output
-
   application:
     runs-on: ubuntu-latest
     needs: infrastructure
@@ -68,7 +67,6 @@ jobs:
             --service employee-frontend-service \
             --force-new-deployment \
             --output text
-
       - name: Wait for ECS Deployment
         run: |
           aws ecs wait services-stable \
