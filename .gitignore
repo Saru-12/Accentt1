@@ -1,0 +1,16 @@
+# Ignore Terraform directories and files
+.terraform/
+*.tfstate
+*.tfstate.backup
+crash.log
+
+# Ignore sensitive files
+terraform.tfvars
+*.tfvars.json
+
+# Ignore editor-specific files
+*.swp
+*.bak
+*.tmp
+.idea/
+.vscode/
