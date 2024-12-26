@@ -9,19 +9,17 @@ resource "aws_ecs_task_definition" "app" {
   cpu                      = 256
   memory                   = 512
 
-  container_definitions = jsonencode([
-    {
-      name  = "employee-frontend"
-      image = var.ecr_repository_url  # Reference to ECR URL variable
-      portMappings = [
-        {
-          containerPort = var.container_port  # Reference to container port
-          hostPort      = var.container_port
-          protocol      = "tcp"
-        }
-      ]
-    }
-  ])
+  container_definitions = jsonencode([{
+    name  = "employee-frontend"
+    image = var.image_url  # Use the image_url variable passed at runtime
+    portMappings = [
+      {
+        containerPort = var.container_port
+        hostPort      = var.container_port
+        protocol      = "tcp"
+      }
+    ]
+  }])
 }
 
 resource "aws_ecs_service" "app" {
@@ -30,7 +28,16 @@ resource "aws_ecs_service" "app" {
   desired_count      = 1
   launch_type        = "FARGATE"
   network_configuration {
-    subnets          = ["subnet-abc123"]  # Replace with actual subnet IDs
+    subnets          = ["subnet-abc123", "subnet-def456"]  # Replace with actual subnet IDs
     assign_public_ip = true
+    security_groups  = ["sg-12345678"]  # Replace with the actual security group ID
   }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.main.arn  # Optional: Only if you're using ALB
+    container_name   = "employee-frontend"
+    container_port   = var.container_port
+  }
+
+  depends_on = [aws_ecs_task_definition.app]
 }
